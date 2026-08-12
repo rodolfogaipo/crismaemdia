@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>Crisma em Dia</title>
+<meta name="description" content="Controle completo dos encontros de Crisma — 100% offline.">
+<meta name="theme-color" content="#12213F">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div class="app-bg"></div>
+<div id="app">
+
+  <!-- TOPBAR -->
+  <div class="topbar" id="topbar">
+    <button class="back-btn" id="backBtn" style="display:none;">‹</button>
+    <div class="brand" id="brandBlock">
+      <img src="assets/icon-72.png" alt="">
+      <span>Crisma em Dia</span>
+    </div>
+    <div class="title-block" id="titleBlock" style="display:none;">
+      <span class="t" id="titleBlockT"></span>
+      <span class="s" id="titleBlockS"></span>
+    </div>
+    <div class="spacer"></div>
+    <button class="icon-btn" id="topActionBtn" style="display:none;">⋮</button>
+  </div>
+
+  <main id="main">
+
+    <!-- ============ INÍCIO ============ -->
+    <section class="view" id="view-inicio">
+      <div class="hero">
+        <div class="greet" id="homeGreetLabel">CATEQUESE DE CRISMA</div>
+        <h2 id="homeGroupName">Turma da Crisma</h2>
+        <div class="sub" id="homeSubtitle">Que o Espírito Santo guie cada encontro.</div>
+        <div class="hero-stats">
+          <div class="hero-stat"><b id="statCrismandos">0</b><span>Crismandos</span></div>
+          <div class="hero-stat"><b id="statEncontros">0</b><span>Encontros</span></div>
+          <div class="hero-stat"><b id="statFrequencia">0%</b><span>Frequência</span></div>
+        </div>
+      </div>
+
+      <div id="avisosBox"></div>
+
+      <div class="section-title"><span>Próximo encontro</span><span class="line"></span></div>
+      <div id="proximoEncontroBox"></div>
+
+      <div class="section-title"><span>Ações rápidas</span><span class="line"></span></div>
+      <div class="row gap-10">
+        <button class="btn btn-primary flex-1" data-action="novo-encontro">+ Encontro</button>
+        <button class="btn btn-ghost flex-1" data-action="novo-crismando">+ Crismando</button>
+      </div>
+
+      <div class="mark"><img src="assets/logo.png" alt="Crisma em Dia"></div>
+    </section>
+
+    <!-- ============ ENCONTROS (lista) ============ -->
+    <section class="view" id="view-encontros">
+      <div class="search-bar"><span class="ic">⌕</span><input type="search" id="buscaEncontros" placeholder="Buscar por tema ou data..."></div>
+      <div id="encontrosLista"></div>
+    </section>
+
+    <!-- ============ ENCONTRO (detalhe) ============ -->
+    <section class="view" id="view-encontro-detalhe">
+      <div class="tabbar" id="encontroTabs">
+        <button class="tab-btn active" data-tab="roteiro">📖 Roteiro</button>
+        <button class="tab-btn" data-tab="presenca">✅ Presença</button>
+        <button class="tab-btn" data-tab="dinamicas">🎲 Dinâmicas</button>
+        <button class="tab-btn" data-tab="anotacoes">📝 Anotações</button>
+        <button class="tab-btn" data-tab="exportar">⇩ Exportar</button>
+      </div>
+      <div id="encontroTabContent"></div>
+    </section>
+
+    <!-- ============ CRISMANDOS ============ -->
+    <section class="view" id="view-crismandos">
+      <button class="btn btn-primary btn-block mb-12" data-action="fazer-chamada">📋 Fazer chamada</button>
+      <div class="search-bar"><span class="ic">⌕</span><input type="search" id="buscaCrismandos" placeholder="Buscar crismando..."></div>
+      <div class="chip-group mb-12" id="ordenarCrismandos">
+        <button class="chip active" data-ord="nome">A–Z</button>
+        <button class="chip" data-ord="freq-desc">Mais presentes</button>
+        <button class="chip" data-ord="freq-asc">Mais faltosos</button>
+      </div>
+      <div id="crismandosLista"></div>
+    </section>
+
+    <!-- ============ DINÂMICAS ============ -->
+    <section class="view" id="view-dinamicas">
+      <div class="search-bar"><span class="ic">⌕</span><input type="search" id="buscaDinamicas" placeholder="Buscar dinâmica, objetivo, material..."></div>
+      <div id="dinamicasLista"></div>
+    </section>
+
+    <!-- ============ MAIS (menu) ============ -->
+    <section class="view" id="view-mais">
+      <div class="section-title" style="margin-top:2px;"><span>Planejamento</span><span class="line"></span></div>
+      <div class="item-row" data-action="ir-cronograma">
+        <div class="avatar">🗓️</div>
+        <div class="main"><div class="t1">Cronograma da Crisma</div><div class="t2">Tema do mês e tema de cada semana do ano</div></div>
+        <div class="chev">›</div>
+      </div>
+
+      <div class="section-title"><span>Consultas</span><span class="line"></span></div>
+      <div class="item-row" data-action="ir-busca-temas">
+        <div class="avatar">🔎</div>
+        <div class="main"><div class="t1">Buscar temas já trabalhados</div><div class="t2">Encontre quando um tema foi abordado</div></div>
+        <div class="chev">›</div>
+      </div>
+      <div class="item-row" data-action="ir-anotacoes-gerais">
+        <div class="avatar">🗒️</div>
+        <div class="main"><div class="t1">Anotações gerais</div><div class="t2">Bloco de notas livre da equipe</div></div>
+        <div class="chev">›</div>
+      </div>
+      <div class="item-row" data-action="ir-relatorios">
+        <div class="avatar">📊</div>
+        <div class="main"><div class="t1">Relatório de frequência</div><div class="t2">Ranking geral e exportação</div></div>
+        <div class="chev">›</div>
+      </div>
+
+      <div class="section-title"><span>Aplicativo</span><span class="line"></span></div>
+      <div class="item-row" data-action="ir-config">
+        <div class="avatar">⚙️</div>
+        <div class="main"><div class="t1">Configurações</div><div class="t2">Nome da turma, paróquia e catequista</div></div>
+        <div class="chev">›</div>
+      </div>
+      <div class="item-row" data-action="ir-backup">
+        <div class="avatar">💾</div>
+        <div class="main"><div class="t1">Backup dos dados</div><div class="t2">Exportar ou importar tudo (.json)</div></div>
+        <div class="chev">›</div>
+      </div>
+      <div class="empty-state" style="padding:24px 18px 6px;">
+        <p class="small muted">Crisma em Dia · 100% offline<br>Todos os dados ficam salvos apenas neste aparelho.</p>
+      </div>
+    </section>
+
+    <!-- ============ BUSCA DE TEMAS ============ -->
+    <section class="view" id="view-busca-temas">
+      <div class="search-bar"><span class="ic">⌕</span><input type="search" id="buscaTemasInput" placeholder="Palavra-chave do tema..." autofocus></div>
+      <div id="buscaTemasResultados"></div>
+    </section>
+
+    <!-- ============ ANOTAÇÕES GERAIS ============ -->
+    <section class="view" id="view-anotacoes-gerais">
+      <button class="btn btn-primary btn-block mb-12" data-action="nova-anotacao">+ Nova anotação</button>
+      <div id="anotacoesGeraisLista"></div>
+    </section>
+
+    <!-- ============ CRONOGRAMA ============ -->
+    <section class="view" id="view-cronograma"></section>
+
+    <!-- ============ RELATÓRIOS ============ -->
+    <section class="view" id="view-relatorios"></section>
+
+    <!-- ============ CONFIG ============ -->
+    <section class="view" id="view-config"></section>
+
+    <!-- ============ BACKUP ============ -->
+    <section class="view" id="view-backup"></section>
+
+  </main>
+
+  <!-- BOTTOM NAV -->
+  <nav class="bottomnav" id="bottomnav">
+    <button class="nav-item active" data-view="inicio"><span class="ic">⛪</span>Início</button>
+    <button class="nav-item" data-view="encontros"><span class="ic">📅</span>Encontros</button>
+    <button class="nav-item" data-view="crismandos"><span class="ic">👥</span>Crismandos</button>
+    <button class="nav-item" data-view="dinamicas"><span class="ic">🎲</span>Dinâmicas</button>
+    <button class="nav-item" data-view="mais"><span class="ic">☰</span>Mais</button>
+  </nav>
+
+  <button class="fab" id="fabBtn" style="display:none;">+</button>
+
+</div>
+
+<!-- MODAL / SHEET OVERLAY -->
+<div class="overlay" id="overlay">
+  <div class="sheet" id="sheet"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div id="print-area" style="display:none;"></div>
+
+<script src="js/vendor/jspdf.umd.min.js"></script>
+<script src="js/vendor/html2canvas.min.js"></script>
+<script src="js/db.js"></script>
+<script src="js/export.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
