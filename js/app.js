@@ -931,12 +931,25 @@
       if(!inp.files.length){ toast("Selecione um arquivo"); return; }
       const reader = new FileReader();
       reader.onload = ()=>{
+        let parsed;
         try{
-          DB.importJSON(reader.result);
-          DB.marcarBackupFeito();
-          toast("Dados importados com sucesso");
-          switchView("inicio");
-        }catch(e){ toast("Arquivo inválido"); }
+          parsed = DB.parseBackupJSON(reader.result);
+        }catch(err){
+          alert("Não foi possível importar este arquivo.\n\nMotivo: " + err.message);
+          return;
+        }
+        const atualC = DB.data.crismandos.length, atualE = DB.data.encontros.length;
+        const novoC = parsed.crismandos.length, novoE = parsed.encontros.length, novoD = parsed.dinamicas.length;
+        let msg = `Este arquivo contém:\n• ${novoC} crismando(s)\n• ${novoE} encontro(s)\n• ${novoD} dinâmica(s)\n\n`;
+        if(novoC===0 && novoE===0){
+          msg += `⚠️ Esse arquivo parece estar vazio — pode não ser o backup certo.\n\n`;
+        }
+        msg += `Isso vai SUBSTITUIR os dados que estão no aparelho agora (${atualC} crismando(s), ${atualE} encontro(s)). Deseja continuar?`;
+        if(!confirm(msg)) return;
+        const resumo = DB.importJSON(parsed);
+        DB.marcarBackupFeito();
+        toast(`Importado: ${resumo.crismandos} crismandos, ${resumo.encontros} encontros`);
+        switchView("inicio");
       };
       reader.readAsText(inp.files[0]);
     };

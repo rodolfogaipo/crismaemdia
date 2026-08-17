@@ -362,15 +362,56 @@ const DB = {
   exportJSON(){
     return JSON.stringify(this.data, null, 2);
   },
-  importJSON(str){
-    const parsed = JSON.parse(str);
-    if(!parsed || typeof parsed !== "object") throw new Error("Arquivo inválido");
-    this.data = parsed;
-    const def = this.defaultData();
-    this.data.config = Object.assign(def.config, this.data.config||{});
-    for(const k of ["crismandos","encontros","dinamicas","notasGerais","cronograma"]){
-      if(!Array.isArray(this.data[k])) this.data[k] = [];
+  parseBackupJSON(str){
+    let parsed;
+    try{
+      parsed = JSON.parse(str);
+    }catch(e){
+      throw new Error("O arquivo não é um JSON válido (pode estar corrompido ou não ser o arquivo certo).");
     }
+    if(!parsed || typeof parsed !== "object" || Array.isArray(parsed)){
+      throw new Error("Esse arquivo não tem o formato esperado de um backup do Crisma em Dia.");
+    }
+    const def = this.defaultData();
+    parsed.config = Object.assign(def.config, parsed.config||{});
+    for(const k of ["crismandos","encontros","dinamicas","notasGerais","cronograma"]){
+      if(!Array.isArray(parsed[k])) parsed[k] = [];
+    }
+    // preenche campos que podem não existir em backups de versões antigas do app
+    parsed.crismandos.forEach(c=>{
+      if(typeof c.turma !== "string") c.turma = c.turma || "";
+      if(typeof c.obs !== "string") c.obs = c.obs || "";
+    });
+    parsed.encontros.forEach(e=>{
+      if(!Array.isArray(e.roteiro)) e.roteiro = [];
+      if(!Array.isArray(e.dinamicaIds)) e.dinamicaIds = [];
+      if(!e.presencas || typeof e.presencas !== "object") e.presencas = {};
+      if(typeof e.tema !== "string") e.tema = e.tema || "";
+      if(typeof e.temaDoMes !== "string") e.temaDoMes = e.temaDoMes || "";
+      if(typeof e.anotacoes !== "string") e.anotacoes = e.anotacoes || "";
+      e.roteiro.forEach(b=>{ if(typeof b.conteudo !== "string") b.conteudo = b.conteudo || ""; });
+    });
+    parsed.dinamicas.forEach(d=>{
+      ["objetivo","materiais","passos","observacoes"].forEach(campo=>{
+        if(typeof d[campo] !== "string") d[campo] = d[campo] || "";
+      });
+    });
+    parsed.cronograma.forEach(m=>{
+      if(!Array.isArray(m.semanas)) m.semanas = [];
+    });
+    return parsed;
+  },
+
+  // recebe os dados já validados (de parseBackupJSON) e substitui o banco atual
+  importJSON(parsedData){
+    this.data = parsedData;
     this.save();
+    return {
+      crismandos: parsedData.crismandos.length,
+      encontros: parsedData.encontros.length,
+      dinamicas: parsedData.dinamicas.length,
+      notasGerais: parsedData.notasGerais.length,
+      cronograma: parsedData.cronograma.length
+    };
   }
 };

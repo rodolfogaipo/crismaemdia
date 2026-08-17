@@ -1,4 +1,4 @@
-const CACHE_NAME = "crisma-em-dia-v2";
+const CACHE_NAME = "crisma-em-dia-v3";
 const ASSETS = [
   "./",
   "./index.html",
