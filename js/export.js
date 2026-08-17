@@ -313,13 +313,38 @@ const Export = {
 
   // ---------- ações de saída ----------
 
+  // Percorre o conteúdo renderizado e encontra, em pixels, todas as bordas
+  // "seguras" para cortar (entre uma linha de texto e outra) — nunca no
+  // meio de uma palavra ou linha.
+  collectLineEdges(container){
+    const containerTop = container.getBoundingClientRect().top;
+    const edges = new Set([0]);
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_ELEMENT);
+    let node;
+    while((node = walker.nextNode())){
+      if(node.children.length === 0 && node.textContent && node.textContent.trim().length > 0){
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const rects = range.getClientRects();
+        for(const r of rects){
+          if(r.height > 0){
+            edges.add(Math.round(r.top - containerTop));
+            edges.add(Math.round(r.bottom - containerTop));
+          }
+        }
+      }
+    }
+    return edges;
+  },
+
   // Gera o PDF diretamente (sem passar pela caixa de impressão) usando
   // jsPDF + html2canvas, ambos embutidos no app — funciona 100% offline.
+  // As quebras de página são calculadas nas bordas entre linhas de texto,
+  // então nenhuma palavra ou linha é cortada ao meio.
   async toPDF(bodyHtml, filenameBase){
     ensurePdfDocStyles();
     const filename = filenameBase.replace(/[^a-z0-9\-_ ]/gi,"").trim().replace(/\s+/g,"-") || "documento";
 
-    // container fora da tela, largura fixa (equivalente a A4)
     let root = document.getElementById("pdfRenderRoot");
     if(!root){
       root = document.createElement("div");
@@ -328,27 +353,58 @@ const Export = {
     }
     root.style.cssText = "position:fixed; left:-99999px; top:0; width:794px; background:#fff; z-index:-1;";
     root.innerHTML = `<div class="pdf-doc">${bodyHtml}</div>`;
+    const containerEl = root.firstElementChild;
 
     try{
-      const canvas = await html2canvas(root.firstElementChild, {
+      const pageWidthMM = 210, pageHeightMM = 297;
+      const domPxPerMM = 794 / pageWidthMM;
+      const pageHeightPxDom = pageHeightMM * domPxPerMM;
+      const totalHeightPxDom = containerEl.getBoundingClientRect().height;
+
+      // calcula os pontos de corte seguros (entre linhas), página por página
+      const edges = [...this.collectLineEdges(containerEl), Math.round(totalHeightPxDom)]
+        .sort((a,b)=>a-b);
+      const breaksDom = [0];
+      let cursor = 0;
+      while(cursor < totalHeightPxDom - 1){
+        const alvo = cursor + pageHeightPxDom;
+        if(alvo >= totalHeightPxDom){ breaksDom.push(totalHeightPxDom); break; }
+        let escolhido = null;
+        for(const e of edges){
+          if(e > cursor && e <= alvo) escolhido = e;
+          if(e > alvo) break;
+        }
+        if(escolhido === null || escolhido <= cursor) escolhido = alvo; // fallback raríssimo
+        breaksDom.push(escolhido);
+        cursor = escolhido;
+      }
+
+      const canvas = await html2canvas(containerEl, {
         scale: 2, backgroundColor: "#ffffff", useCORS: true, windowWidth: 794
       });
+      const canvasScale = canvas.height / totalHeightPxDom;
+      const pxPerMMCanvas = canvas.width / pageWidthMM;
+
       const { jsPDF } = window.jspdf;
       const pdf = new jsPDF("p", "mm", "a4");
-      const pageWidth = 210, pageHeight = 297;
-      const imgWidth = pageWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      const imgData = canvas.toDataURL("image/jpeg", 0.95);
 
-      let heightLeft = imgHeight;
-      let position = 0;
-      pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-      while(heightLeft > 0){
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
+      for(let i=0; i<breaksDom.length-1; i++){
+        const yInicioCanvas = Math.round(breaksDom[i] * canvasScale);
+        const yFimCanvas = Math.round(breaksDom[i+1] * canvasScale);
+        const fatiaPx = Math.max(1, yFimCanvas - yInicioCanvas);
+
+        const pageCanvas = document.createElement("canvas");
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = fatiaPx;
+        const ctx = pageCanvas.getContext("2d");
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+        ctx.drawImage(canvas, 0, yInicioCanvas, canvas.width, fatiaPx, 0, 0, canvas.width, fatiaPx);
+
+        const imgData = pageCanvas.toDataURL("image/jpeg", 0.95);
+        const fatiaMM = fatiaPx / pxPerMMCanvas;
+        if(i>0) pdf.addPage();
+        pdf.addImage(imgData, "JPEG", 0, 0, pageWidthMM, fatiaMM);
       }
       pdf.save(filename + ".pdf");
     } finally {
