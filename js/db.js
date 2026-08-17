@@ -23,7 +23,8 @@ const DB = {
         paroquia: "",
         catequista: "",
         anoTurma: new Date().getFullYear().toString(),
-        diasAviso: 7
+        diasAviso: 7,
+        ultimoBackup: null
       },
       crismandos: [],
       encontros: [],
@@ -85,6 +86,11 @@ const DB = {
     // remove presenças associadas
     this.data.encontros.forEach(e=>{ if(e.presencas) delete e.presencas[id]; });
     this.save();
+  },
+  listaTurmas(){
+    const set = new Set();
+    this.data.crismandos.forEach(c=>{ if(c.turma && c.turma.trim()) set.add(c.turma.trim()); });
+    return [...set].sort((a,b)=>a.localeCompare(b,'pt-BR'));
   },
 
   // ---------- ENCONTROS ----------
@@ -249,7 +255,7 @@ const DB = {
     this.save();
   },
 
-  // ---------- BUSCA DE TEMAS ----------
+  // ---------- BUSCA DE TEMAS (encontros + dinâmicas) ----------
   buscarTemas(query){
     const q = query.trim().toLowerCase();
     if(!q) return [];
@@ -258,15 +264,32 @@ const DB = {
       let hit = false;
       let trecho = "";
       if((e.tema||"").toLowerCase().includes(q)){ hit = true; trecho = e.tema; }
+      if(!hit && (e.temaDoMes||"").toLowerCase().includes(q)){ hit = true; trecho = e.temaDoMes; }
       if(!hit){
         for(const b of e.roteiro){
           if((b.conteudo||"").toLowerCase().includes(q)){ hit=true; trecho = b.conteudo.slice(0,90); break; }
         }
       }
       if(!hit && (e.anotacoes||"").toLowerCase().includes(q)){ hit=true; trecho = e.anotacoes.slice(0,90); }
-      if(hit) results.push({ encontro: e, trecho });
+      if(hit) results.push({ tipo:"encontro", encontro: e, trecho });
     });
-    results.sort((a,b)=> a.encontro.data < b.encontro.data ? 1 : -1);
+    this.data.dinamicas.forEach(d=>{
+      const titulo = d.titulo||"";
+      const camposExtra = [d.objetivo, d.materiais, d.passos, d.observacoes];
+      let hit = false, trecho = "";
+      if(titulo.toLowerCase().includes(q)){ hit = true; trecho = titulo; }
+      if(!hit){
+        for(const campo of camposExtra){
+          if(campo && campo.toLowerCase().includes(q)){ hit = true; trecho = campo.slice(0,90); break; }
+        }
+      }
+      if(hit) results.push({ tipo:"dinamica", dinamica: d, trecho });
+    });
+    results.sort((a,b)=>{
+      const da = a.tipo==="encontro" ? a.encontro.data : "0000-00-00";
+      const dbb = b.tipo==="encontro" ? b.encontro.data : "0000-00-00";
+      return da < dbb ? 1 : -1;
+    });
     return results;
   },
 
@@ -323,6 +346,19 @@ const DB = {
   },
 
   // ---------- BACKUP ----------
+  diasDesdeBackup(){
+    if(!this.data.config.ultimoBackup) return null;
+    const last = new Date(this.data.config.ultimoBackup);
+    const now = new Date();
+    return Math.floor((now-last)/86400000);
+  },
+  marcarBackupFeito(){
+    this.data.config.ultimoBackup = new Date().toISOString();
+    this.save();
+  },
+  temDadosRelevantes(){
+    return this.data.crismandos.length>0 || this.data.encontros.length>0;
+  },
   exportJSON(){
     return JSON.stringify(this.data, null, 2);
   },

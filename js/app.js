@@ -10,6 +10,9 @@
     encontroTab: "roteiro",
     roteiroMode: "leitura",
     crismandoOrd: "nome",
+    crismandoTurma: "",
+    chamadaTurma: "",
+    relatorioTurma: "",
     notaEditId: null,
     chamadaEncontroId: null
   };
@@ -139,6 +142,24 @@
     $("#statEncontros").textContent = DB.data.encontros.length;
     $("#statFrequencia").textContent = DB.frequenciaGeralMedia()+"%";
 
+    // lembrete de backup
+    const backupBox = $("#backupLembreteBox");
+    const diasBackup = DB.diasDesdeBackup();
+    if(DB.temDadosRelevantes() && (diasBackup===null || diasBackup>=30)){
+      const msg = diasBackup===null
+        ? "Você ainda não fez nenhum backup dos dados deste aplicativo."
+        : `Já faz ${diasBackup} dias desde o seu último backup.`;
+      backupBox.innerHTML = `<div class="aviso" data-action="ir-backup" style="background:linear-gradient(135deg,#EAF1FB,#DCE7F7); border-color:#C4D6EF;">
+        <span class="ic">💾</span>
+        <div>
+          <div class="t1">Faça um backup dos seus dados</div>
+          <div class="t2" style="color:#3A5A87;">${msg} Tudo fica salvo só neste aparelho.</div>
+        </div>
+      </div>`;
+    } else {
+      backupBox.innerHTML = "";
+    }
+
     // avisos
     const hoje = todayISO();
     const limite = cfg.diasAviso || 7;
@@ -240,6 +261,10 @@
     $("#encontrosLista").innerHTML = html;
   }
 
+  function encontroConflitante(data, excludeId){
+    return DB.data.encontros.find(e=>e.data===data && e.id!==excludeId) || null;
+  }
+
   function sheetEncontroForm(existing){
     const isEdit = !!existing;
     const temaMesSugerido = existing ? existing.temaDoMes : DB.ultimoTemaDoMes();
@@ -276,7 +301,13 @@
     $("#formEncontro").onsubmit = (ev)=>{
       ev.preventDefault();
       const fd = new FormData(ev.target);
-      const obj = { data: fd.get("data"), tema: fd.get("tema"), temaDoMes: fd.get("temaDoMes"), local: fd.get("local") };
+      const dataEscolhida = fd.get("data");
+      const conflito = encontroConflitante(dataEscolhida, isEdit ? existing.id : null);
+      if(conflito){
+        const ok = confirm(`Já existe um encontro cadastrado em ${fmtDataBR(dataEscolhida)}${conflito.tema ? ` ("${conflito.tema}")` : ""}.\n\nDeseja criar outro encontro na mesma data mesmo assim?`);
+        if(!ok) return;
+      }
+      const obj = { data: dataEscolhida, tema: fd.get("tema"), temaDoMes: fd.get("temaDoMes"), local: fd.get("local") };
       if(isEdit){
         DB.updateEncontro(existing.id, obj);
         toast("Encontro atualizado");
@@ -462,8 +493,24 @@
       <div class="section-title" style="margin-top:0;"><span>Exportar este encontro</span><span class="line"></span></div>
       ${exportRow("Roteiro", "roteiro")}
       ${exportRow("Lista de chamada", "chamada")}
+      ${exportRow("Chamada em folha (para marcar à mão)", "chamada-folha")}
       ${exportRow("Dinâmicas do encontro", "dinamicas-encontro")}
       ${exportRow("Encontro completo", "completo")}
+
+      <div class="section-title"><span>Exportar personalizado</span><span class="line"></span></div>
+      <div class="card">
+        <p class="small muted mb-8">Marque só o que você quer no arquivo:</p>
+        <label class="dinamica-check"><input type="checkbox" id="pers-roteiro" checked><div class="flex-1">Roteiro</div></label>
+        <label class="dinamica-check"><input type="checkbox" id="pers-dinamicas" checked><div class="flex-1">Dinâmicas do encontro</div></label>
+        <label class="dinamica-check"><input type="checkbox" id="pers-presenca" checked><div class="flex-1">Lista de chamada / presença</div></label>
+        <label class="dinamica-check"><input type="checkbox" id="pers-chamada-folha"><div class="flex-1">Chamada em folha (quadrados para marcar à mão)</div></label>
+        <label class="dinamica-check"><input type="checkbox" id="pers-anotacoes" checked><div class="flex-1">Anotações</div></label>
+        <div class="row gap-8 mt-12">
+          <button class="btn btn-outline flex-1" data-action="exportar-personalizado" data-formato="pdf">PDF</button>
+          <button class="btn btn-ghost flex-1" data-action="exportar-personalizado" data-formato="word">Word</button>
+        </div>
+      </div>
+
       <p class="small muted center mt-16">"PDF" baixa o arquivo direto no aparelho. "Word" baixa um .doc pronto para abrir e editar.</p>
     `;
   }
@@ -483,7 +530,16 @@
   // ================================================================
   function renderCrismandos(){
     const q = ($("#buscaCrismandos").value||"").toLowerCase().trim();
+    const turmas = DB.listaTurmas();
+    const filtroBox = $("#filtroTurmaCrismandos");
+    if(!turmas.length){
+      filtroBox.innerHTML = "";
+    } else {
+      filtroBox.innerHTML = `<button class="chip ${state.crismandoTurma===""?"active":""}" data-turma="">Todas as turmas</button>` +
+        turmas.map(t=>`<button class="chip ${state.crismandoTurma===t?"active":""}" data-turma="${esc(t)}">${esc(t)}</button>`).join("");
+    }
     let list = DB.data.crismandos.filter(c=>!q || c.nome.toLowerCase().includes(q) || (c.turma||"").toLowerCase().includes(q));
+    if(state.crismandoTurma) list = list.filter(c=>(c.turma||"")===state.crismandoTurma);
     const withFreq = list.map(c=>({c, f: DB.frequenciaCrismando(c.id)}));
     if(state.crismandoOrd==="nome") withFreq.sort((a,b)=>a.c.nome.localeCompare(b.c.nome,'pt-BR'));
     else if(state.crismandoOrd==="freq-desc") withFreq.sort((a,b)=> (b.f.pct??-1)-(a.f.pct??-1));
@@ -517,7 +573,8 @@
       <div class="sheet-head"><h3>${isEdit?"Editar":"Novo"} crismando</h3><button class="x" data-close-sheet>✕</button></div>
       <form id="formCrismando">
         <div class="field"><label>Nome completo</label><input type="text" name="nome" required placeholder="Nome completo" value="${existing?esc(existing.nome):""}"></div>
-        <div class="field"><label>Turma / grupo (opcional)</label><input type="text" name="turma" placeholder="Ex.: Turma A" value="${existing?esc(existing.turma||""):""}"></div>
+        <div class="field"><label>Turma / grupo (opcional)</label><input type="text" name="turma" list="turmasSugestoesDatalist" placeholder="Ex.: Turma A" value="${existing?esc(existing.turma||""):""}"></div>
+        <datalist id="turmasSugestoesDatalist">${DB.listaTurmas().map(t=>`<option value="${esc(t)}">`).join("")}</datalist>
         <div class="field"><label>Observações</label><textarea name="obs" rows="3" placeholder="Ex.: contato do responsável, restrições, observações pastorais...">${existing?esc(existing.obs||""):""}</textarea></div>
         <div class="sheet-actions">
           <button type="button" class="btn btn-ghost" data-close-sheet>Cancelar</button>
@@ -547,7 +604,9 @@
   }
 
   function chamadaSheetHtml(e){
-    const crismandos = [...DB.data.crismandos].sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR'));
+    const turmas = DB.listaTurmas();
+    let crismandos = [...DB.data.crismandos].sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR'));
+    if(state.chamadaTurma) crismandos = crismandos.filter(c=>(c.turma||"")===state.chamadaTurma);
     let p=0,f=0;
     const rows = crismandos.map(c=>{
       const st = e.presencas?.[c.id] || null;
@@ -560,10 +619,16 @@
         </div>
       </div>`;
     }).join("");
+    const filtroTurmaHtml = turmas.length ? `
+      <div class="chip-group mb-12" id="filtroTurmaChamada">
+        <button class="chip ${state.chamadaTurma===""?"active":""}" data-turma="">Todas</button>
+        ${turmas.map(t=>`<button class="chip ${state.chamadaTurma===t?"active":""}" data-turma="${esc(t)}">${esc(t)}</button>`).join("")}
+      </div>` : "";
     return `
       <div class="sheet-head"><h3>Fazer chamada</h3><button class="x" data-close-sheet>✕</button></div>
       <div class="field"><label>Data</label><input type="date" id="chamadaData" value="${e.data}"></div>
       ${e.tema ? `<p class="small muted mb-8">Este encontro já tem o tema "${esc(e.tema)}" cadastrado — a chamada é somente a presença, o roteiro continua separado.</p>` : ""}
+      ${filtroTurmaHtml}
       <div class="presenca-summary">
         <div class="ps"><b>${crismandos.length}</b><span>Total</span></div>
         <div class="ps"><b style="color:var(--ok-600)">${p}</b><span>Presentes</span></div>
@@ -692,20 +757,26 @@
     const q = ($("#buscaTemasInput").value||"").trim();
     const box = $("#buscaTemasResultados");
     if(!q){
-      box.innerHTML = `<div class="empty-state"><span class="ic">🔎</span><h4>Pesquise por um tema</h4><p>Descubra rapidamente quando um assunto já foi trabalhado nos encontros.</p></div>`;
+      box.innerHTML = `<div class="empty-state"><span class="ic">🔎</span><h4>Pesquise por um tema</h4><p>Busca no tema do mês, no tema da semana, no roteiro, nas anotações e também nas dinâmicas cadastradas.</p></div>`;
       return;
     }
     const results = DB.buscarTemas(q);
     if(!results.length){
-      box.innerHTML = `<div class="empty-state"><span class="ic">📭</span><h4>Nada encontrado</h4><p>Nenhum encontro cita "${esc(q)}".</p></div>`;
+      box.innerHTML = `<div class="empty-state"><span class="ic">📭</span><h4>Nada encontrado</h4><p>Nada cita "${esc(q)}".</p></div>`;
       return;
     }
-    box.innerHTML = results.map(r=>`
-      <div class="result-item" data-goto-encontro="${r.encontro.id}">
-        <div class="t1">${highlight(r.encontro.tema||"Encontro sem tema", q)}</div>
-        <div class="t2">${fmtDataBR(r.encontro.data)}${r.trecho && r.trecho!==r.encontro.tema ? " — "+highlight(r.trecho, q)+"…" : ""}</div>
-      </div>
-    `).join("");
+    box.innerHTML = results.map(r=>{
+      if(r.tipo==="encontro"){
+        return `<div class="result-item" data-goto-encontro="${r.encontro.id}">
+          <div class="t1">${highlight(r.encontro.tema||"Encontro sem tema", q)}</div>
+          <div class="t2">📅 ${fmtDataBR(r.encontro.data)}${r.trecho && r.trecho!==r.encontro.tema ? " — "+highlight(r.trecho, q)+"…" : ""}</div>
+        </div>`;
+      }
+      return `<div class="result-item" data-abrir-dinamica-busca="${r.dinamica.id}" style="border-left-color:var(--red-600);">
+        <div class="t1">${highlight(r.dinamica.titulo||"Dinâmica", q)}</div>
+        <div class="t2">🎲 Dinâmica${r.trecho && r.trecho!==r.dinamica.titulo ? " — "+highlight(r.trecho, q)+"…" : ""}</div>
+      </div>`;
+    }).join("");
   }
 
   // ================================================================
@@ -760,7 +831,12 @@
   // RELATÓRIOS
   // ================================================================
   function renderRelatorios(){
-    const crismandos = [...DB.data.crismandos].map(c=>({c, f: DB.frequenciaCrismando(c.id)})).sort((a,b)=>(b.f.pct??-1)-(a.f.pct??-1));
+    const turmas = DB.listaTurmas();
+    let crismandosBase = DB.data.crismandos;
+    if(state.relatorioTurma) crismandosBase = crismandosBase.filter(c=>(c.turma||"")===state.relatorioTurma);
+    const crismandos = [...crismandosBase].map(c=>({c, f: DB.frequenciaCrismando(c.id)})).sort((a,b)=>(b.f.pct??-1)-(a.f.pct??-1));
+    const comFreq = crismandos.filter(x=>x.f.pct!==null);
+    const mediaFiltrada = comFreq.length ? Math.round(comFreq.reduce((s,x)=>s+x.f.pct,0)/comFreq.length) : 0;
     const rows = crismandos.map(({c,f})=>`
       <div class="item-row">
         <div class="avatar">${iniciais(c.nome)}</div>
@@ -770,14 +846,20 @@
         </div>
         <span class="badge ${f.pct===null?'badge-navy':f.pct>=75?'badge-ok':f.pct>=50?'badge-gold':'badge-warn'}">${f.pct===null?"—":f.pct+"%"}</span>
       </div>`).join("");
+    const filtroHtml = turmas.length ? `
+      <div class="chip-group mb-12" id="filtroTurmaRelatorio">
+        <button class="chip ${state.relatorioTurma===""?"active":""}" data-turma="">Todas as turmas</button>
+        ${turmas.map(t=>`<button class="chip ${state.relatorioTurma===t?"active":""}" data-turma="${esc(t)}">${esc(t)}</button>`).join("")}
+      </div>` : "";
     $("#view-relatorios").innerHTML = `
       <div class="hero" style="padding:16px 16px;">
         <div class="hero-stats" style="margin-top:0;">
-          <div class="hero-stat"><b>${DB.data.crismandos.length}</b><span>Crismandos</span></div>
+          <div class="hero-stat"><b>${crismandosBase.length}</b><span>Crismandos</span></div>
           <div class="hero-stat"><b>${DB.encontrosRealizados().length}</b><span>Realizados</span></div>
-          <div class="hero-stat"><b>${DB.frequenciaGeralMedia()}%</b><span>Freq. média</span></div>
+          <div class="hero-stat"><b>${state.relatorioTurma ? mediaFiltrada : DB.frequenciaGeralMedia()}%</b><span>Freq. média</span></div>
         </div>
       </div>
+      ${filtroHtml}
       <div class="row gap-8 mb-12">
         <button class="btn btn-outline flex-1" data-action="exportar-geral" data-formato="pdf">Exportar PDF</button>
         <button class="btn btn-ghost flex-1" data-action="exportar-geral" data-formato="word">Exportar Word</button>
@@ -841,6 +923,7 @@
       a.href = url; a.download = `crisma-em-dia-backup-${todayISO()}.json`;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(()=>URL.revokeObjectURL(url), 2000);
+      DB.marcarBackupFeito();
       toast("Backup baixado");
     };
     $("#btnImportBackup").onclick = ()=>{
@@ -850,6 +933,7 @@
       reader.onload = ()=>{
         try{
           DB.importJSON(reader.result);
+          DB.marcarBackupFeito();
           toast("Dados importados com sucesso");
           switchView("inicio");
         }catch(e){ toast("Arquivo inválido"); }
@@ -865,7 +949,11 @@
     const meses = DB.data.cronograma;
     let html = `
       <p class="small muted mb-12">Monte aqui o planejamento do ano todo: o tema que a Igreja celebra em cada mês e o tema de cada semana. Ao criar um encontro, você pode puxar esses temas automaticamente.</p>
-      <button class="btn btn-primary btn-block mb-12" data-action="novo-mes-cronograma">+ Adicionar mês</button>`;
+      <button class="btn btn-primary btn-block mb-12" data-action="novo-mes-cronograma">+ Adicionar mês</button>
+      ${meses.length ? `<div class="row gap-8 mb-16">
+        <button class="btn btn-outline flex-1" data-action="exportar-cronograma" data-formato="pdf">Exportar cronograma (PDF)</button>
+        <button class="btn btn-ghost flex-1" data-action="exportar-cronograma" data-formato="word">Word</button>
+      </div>` : ""}`;
 
     if(!meses.length){
       html += `<div class="empty-state"><span class="ic">🗓️</span><h4>Nenhum mês cadastrado</h4><p>Adicione o primeiro mês para começar o planejamento.</p></div>`;
@@ -980,6 +1068,19 @@
     const abrirCris = ev.target.closest("[data-abrir-crismando]");
     if(abrirCris){ sheetCrismandoDetalhe(abrirCris.dataset.abrirCrismando); return; }
 
+    const abrirDinBusca = ev.target.closest("[data-abrir-dinamica-busca]");
+    if(abrirDinBusca){
+      const id = abrirDinBusca.dataset.abrirDinamicaBusca;
+      const buscaDin = document.getElementById("buscaDinamicas");
+      if(buscaDin) buscaDin.value = "";
+      switchView("dinamicas");
+      setTimeout(()=>{
+        const card = document.getElementById("dc-"+id);
+        if(card){ card.classList.add("open"); card.scrollIntoView({behavior:"smooth", block:"center"}); }
+      }, 80);
+      return;
+    }
+
     const tabBtn = ev.target.closest(".tab-btn");
     if(tabBtn && tabBtn.closest("#encontroTabs")){
       state.encontroTab = tabBtn.dataset.tab;
@@ -1037,6 +1138,11 @@
         if(confirm("Excluir esta anotação?")){ DB.deleteNotaGeral(action.dataset.id); closeSheet(); toast("Anotação excluída"); renderAnotacoesGerais(); }
       }
       else if(act==="ir-cronograma"){ switchView("cronograma"); }
+      else if(act==="exportar-cronograma"){
+        const doc = Export.docCronograma();
+        if(action.dataset.formato==="pdf"){ toast("Gerando PDF..."); Export.toPDF(doc.bodyHtml, "cronograma-crisma").then(()=>toast("PDF baixado")); }
+        else Export.toWord(doc.fullHtml, "cronograma-crisma");
+      }
       else if(act==="novo-mes-cronograma"){ sheetMesCronogramaForm(null); }
       else if(act==="editar-mes-cronograma"){ sheetMesCronogramaForm(DB.data.cronograma.find(x=>x.id===action.dataset.id)); }
       else if(act==="excluir-mes-cronograma"){
@@ -1108,10 +1214,26 @@
         DB.save();
       }
       else if(act==="exportar"){ handleExportar(action.dataset.kind, action.dataset.formato); }
+      else if(act==="exportar-personalizado"){
+        const e = DB.getEncontro(state.encontroId);
+        if(!e) return;
+        const opts = {
+          incluirRoteiro: $("#pers-roteiro").checked,
+          incluirDinamicas: $("#pers-dinamicas").checked,
+          incluirPresenca: $("#pers-presenca").checked,
+          incluirChamadaFolha: $("#pers-chamada-folha").checked,
+          incluirAnotacoes: $("#pers-anotacoes").checked
+        };
+        const doc = Export.docEncontroCompleto(e, opts);
+        const name = "encontro-"+e.data;
+        if(action.dataset.formato==="pdf"){ toast("Gerando PDF..."); Export.toPDF(doc.bodyHtml, name).then(()=>toast("PDF baixado")); }
+        else Export.toWord(doc.fullHtml, name);
+      }
       else if(act==="exportar-geral"){
-        const doc = Export.docRelatorioFrequencia();
-        if(action.dataset.formato==="pdf"){ toast("Gerando PDF..."); Export.toPDF(doc.bodyHtml, "relatorio-frequencia").then(()=>toast("PDF baixado")); }
-        else Export.toWord(doc.fullHtml, "relatorio-frequencia");
+        const doc = Export.docRelatorioFrequencia(state.relatorioTurma || null);
+        const name = state.relatorioTurma ? "relatorio-"+state.relatorioTurma : "relatorio-frequencia";
+        if(action.dataset.formato==="pdf"){ toast("Gerando PDF..."); Export.toPDF(doc.bodyHtml, name).then(()=>toast("PDF baixado")); }
+        else Export.toWord(doc.fullHtml, name);
       }
       return;
     }
@@ -1139,6 +1261,24 @@
       chip.classList.add("active");
       state.crismandoOrd = chip.dataset.ord;
       renderCrismandos();
+      return;
+    }
+    const turmaChip = ev.target.closest("#filtroTurmaCrismandos .chip");
+    if(turmaChip){
+      state.crismandoTurma = turmaChip.dataset.turma || "";
+      renderCrismandos();
+      return;
+    }
+    const turmaChamadaChip = ev.target.closest("#filtroTurmaChamada .chip");
+    if(turmaChamadaChip){
+      state.chamadaTurma = turmaChamadaChip.dataset.turma || "";
+      refreshChamadaSheet();
+      return;
+    }
+    const turmaRelatorioChip = ev.target.closest("#filtroTurmaRelatorio .chip");
+    if(turmaRelatorioChip){
+      state.relatorioTurma = turmaRelatorioChip.dataset.turma || "";
+      renderRelatorios();
     }
   });
 
@@ -1153,6 +1293,7 @@
       doc = Export.docDinamicas(dins, `Dinâmicas — ${e.tema||"Encontro"} (${Export.fmtData(e.data)})`);
       name = "dinamicas-"+e.data;
     }
+    else if(kind==="chamada-folha"){ doc = Export.docChamadaFolha(e); name = "chamada-folha-"+e.data; }
     else if(kind==="completo"){ doc = Export.docEncontroCompleto(e); name = "encontro-completo-"+e.data; }
     if(!doc) return;
     if(formato==="pdf"){ toast("Gerando PDF..."); Export.toPDF(doc.bodyHtml, name).then(()=>toast("PDF baixado")); }
